@@ -1,3 +1,4 @@
+
 ; ParkingSystem
 .model small
 .stack 100h
@@ -10,8 +11,9 @@
     menu3   db 'Press 3 for Bus (Fee: 400)$'
     menu4   db 'Press 4 to Show Record$'
     menu5   db 'Press 5 to Delete Record$'
-    menu6   db 'Press 6 to Remove a Vehicle$'
-    menu7   db 'Press 7 to Exit$'
+    menu6   db 'Press 6 to Exit$'
+    menu7 db 'Press 7 to Remove a Vehicle$'
+
 
     ; Messages
     msg1    db 'Parking is Full! Maximum 8 vehicles allowed.$'
@@ -25,16 +27,17 @@
     msg9    db 'Buses: $'
     msg10   db 'Available Space: $'
     msg11   db 'Thank you for using Parking System!$'
-    msg12   db 'Press any key to continue...$'
-    msg13   db 'Select vehicle to remove (1=Van, 2=Car, 3=Bus): $'
+    msg12 db 'Press any key to continue...$'
+    msg13 db 'Which vehicle to remove? 1-Van 2-Car 3-Bus$'
+    msg14 db 'No vehicle of this type in park!$'
+    msg15 db 'Vehicle removed successfully!$'
 
-    msg14   db 'No vehicle of this type in park!$'
-    msg15   db 'Vehicle removed successfully!$'
+
 
     ; Variables
     amount      dw 0        ; Total amount collected (word)
     total_count db 0        ; Total vehicles count (0-8)
-    vans        db 0        ; vans count
+    vans    db 0        ; vans count
     cars        db 0        ; Car count
     buses       db 0        ; Bus count
     MAX_CAPACITY equ 8      ; Maximum parking capacity
@@ -59,17 +62,12 @@ main_loop:
     je show_record
     cmp al, '5'
     je delete_record
-    
-   cmp al, '6'
-   jne not_remove        ; short jump OK
-   jmp remove_vehicle    ; long jump OK
-   not_remove:
-   
-   cmp al, '7'
-   jne not_exit
-   jmp exit_program
-not_exit:
-    
+    cmp al, '6'
+    je exit_program
+    cmp al, '7'
+       je near_remove_vehicle 
+
+
     ; Invalid input
     mov dx, offset msg2
     mov ah, 9
@@ -77,7 +75,9 @@ not_exit:
     call new_line
     call wait_keypress
     jmp main_loop
-
+    
+    near_remove_vehicle:
+    jmp remove_vehicle
 
 ;------------------------Add Vehicles------------------------
 add_van:
@@ -105,6 +105,11 @@ delete_record:
     call reset_record
     jmp main_loop
 
+;------------------------Exit Program------------------------
+exit_program:
+    call display_exit_message
+    mov ah, 4ch
+    int 21h
 
 ;------------------------Procedures------------------------
 
@@ -150,6 +155,7 @@ display_menu proc
 display_menu endp
 
 ; Get user choice
+; Preserve AL across calls that clobber registers
 get_choice proc
     mov ah, 1
     int 21h          ; AL = key pressed
@@ -164,7 +170,7 @@ add_vehicle proc
     ; Check parking capacity: if total_count >= MAX_CAPACITY then full
     mov bl, total_count
     cmp bl, MAX_CAPACITY
-    jae parking_full
+    jae parking_full      ; jump if BL >= MAX_CAPACITY
 
     ; Add amount
     add amount, ax
@@ -203,9 +209,8 @@ parking_full:
     call wait_keypress
     ret
 add_vehicle endp
-
 ;------------------------Remove Vehicle------------------------
-remove_vehicle:
+remove_vehicle proc
     call clear_screen
     
     ; Display header
@@ -216,36 +221,32 @@ remove_vehicle:
     call new_line
 
     ; Display removal prompt
-    mov dx, offset msg13
+    mov dx, offset msg13       ; 'Which vehicle to remove? 1-Van 2-Car 3-Bus$'
     mov ah, 9
     int 21h
     call new_line
 
-   ; Get user choice
-     mov ah, 1
-      int 21h      ; AL = key pressed
-      mov bl, al   ; save user's key
-      call new_line
-      mov al, bl   ; restore key
-      
-      
+    ; Get user choice
+    mov ah, 1
+    int 21h
+    call new_line
+
     ; Process choice
     cmp al, '1'
-    je remove_van_type
+    je remove_van
     cmp al, '2'
-    je remove_car_type
+    je remove_car
     cmp al, '3'
-    je remove_bus_type
+    je remove_bus
 
     ; Invalid input
     mov dx, offset msg2
     mov ah, 9
     int 21h
-    call new_line
     call wait_keypress
-    jmp main_loop
+    ret
 
-remove_van_type:
+remove_van:
     mov bl, vans
     cmp bl, 0
     jle no_vehicle_error
@@ -254,7 +255,7 @@ remove_van_type:
     dec total_count
     jmp removed_success
 
-remove_car_type:
+remove_car:
     mov bl, cars
     cmp bl, 0
     jle no_vehicle_error
@@ -263,7 +264,7 @@ remove_car_type:
     dec total_count
     jmp removed_success
 
-remove_bus_type:
+remove_bus:
     mov bl, buses
     cmp bl, 0
     jle no_vehicle_error
@@ -273,21 +274,19 @@ remove_bus_type:
     jmp removed_success
 
 no_vehicle_error:
-    mov dx, offset msg14
+    mov dx, offset msg14        ; 'No vehicle of this type in park!'
     mov ah, 9
     int 21h
-    call new_line
     call wait_keypress
-    jmp main_loop
+    ret
 
 removed_success:
-    mov dx, offset msg15
+    mov dx, offset msg15       ; 'Vehicle removed successfully!'
     mov ah, 9
     int 21h
-    call new_line
     call wait_keypress
-    jmp main_loop
-
+    ret
+remove_vehicle endp
 ; Display record
 display_record proc
     call clear_screen
@@ -359,7 +358,7 @@ display_record endp
 reset_record proc
     mov amount, 0
     mov total_count, 0
-    mov vans, 0
+    mov vans , 0
     mov cars, 0
     mov buses, 0
     mov dx, offset msg4
@@ -371,13 +370,6 @@ reset_record proc
 reset_record endp
 
 
-;------------------------Exit Program------------------------
-exit_program:
-    call display_exit_message
-    mov ah, 4ch
-    int 21h
-
-
 ; Display exit message
 display_exit_message proc
     call clear_screen
@@ -387,6 +379,8 @@ display_exit_message proc
     call new_line
     ret
 display_exit_message endp
+
+
 
 ; Print number procedure (supports AX > 255)
 print_number proc
@@ -417,6 +411,7 @@ pn_push_loop:
 
 pn_pop_loop:
     pop dx
+    mov dl, dl         ; ensure DL remains low byte of DX
     add dl, '0'
     mov ah, 2
     int 21h
@@ -430,6 +425,8 @@ pn_end:
     pop ax
     ret
 print_number endp
+
+
 
 ; New line
 new_line proc
@@ -445,15 +442,19 @@ new_line endp
 ; Wait for keypress
 wait_keypress proc
     call new_line
+
+    ; Print message to user
     mov dx, offset msg12
     mov ah, 9
     int 21h
+
+    ; Wait for ANY key
     mov ah, 1
     int 21h
+
     call new_line
     ret
 wait_keypress endp
-
 
 ; Clear screen
 clear_screen proc
@@ -462,6 +463,7 @@ clear_screen proc
     mov cx, 0000h
     mov dx, 184Fh
     int 10h
+
     mov ah, 2
     mov bh, 0
     mov dx, 0000h
